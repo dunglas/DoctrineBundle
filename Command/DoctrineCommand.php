@@ -9,6 +9,7 @@ use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\Tools\EntityGenerator;
 use LogicException;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Base class for Doctrine console commands to extend from.
@@ -17,14 +18,58 @@ use Symfony\Component\Console\Command\Command;
  */
 abstract class DoctrineCommand extends Command
 {
-    /** @var ManagerRegistry */
-    protected $doctrine;
+    /** @var ManagerRegistry|null */
+    private $doctrine;
 
-    public function __construct(ManagerRegistry $doctrine)
+    /** @var ContainerInterface|null */
+    private $container;
+
+    public function __construct(ManagerRegistry $doctrine = null)
     {
         parent::__construct();
 
+        if (null === $doctrine) {
+            @trigger_error(sprintf(
+                'The "%s" constructor expects a "%s" instance as first argument, not passing it will throw a \TypeError in DoctrineBundle 2.0.',
+                get_class($this),
+                ManagerRegistry::class
+            ), E_USER_DEPRECATED);
+        }
+
         $this->doctrine = $doctrine;
+    }
+
+    /**
+     * @deprecated
+     */
+    public function setContainer(ContainerInterface $container = null)
+    {
+        @trigger_error(sprintf('The "%s()" method is deprecated and will be removed in DoctrineBundle 2.0.', __METHOD__), E_USER_DEPRECATED);
+
+        $this->container = $container;
+    }
+
+    /**
+     * @return ContainerInterface
+     *
+     * @throws \LogicException
+     *
+     * @deprecated
+     */
+    protected function getContainer()
+    {
+        @trigger_error(sprintf('The "%s()" method is deprecated and will be removed in DoctrineBundle 2.0.', __METHOD__), E_USER_DEPRECATED);
+
+        if (null === $this->container) {
+            $application = $this->getApplication();
+            if (null === $application) {
+                throw new \LogicException('The container cannot be retrieved as the application instance is not yet set.');
+            }
+
+            $this->container = $application->getKernel()->getContainer();
+        }
+
+        return $this->container;
     }
 
     /**
@@ -55,7 +100,7 @@ abstract class DoctrineCommand extends Command
      */
     protected function getEntityManager($name, $shardId = null)
     {
-        $manager = $this->doctrine->getManager($name);
+        $manager = $this->getDoctrine()->getManager($name);
 
         if ($shardId) {
             if (! $manager->getConnection() instanceof PoolingShardConnection) {
@@ -77,6 +122,14 @@ abstract class DoctrineCommand extends Command
      */
     protected function getDoctrineConnection($name)
     {
-        return $this->doctrine->getConnection($name);
+        return $this->getDoctrine()->getConnection($name);
+    }
+
+    /**
+     * @return ManagerRegistry
+     */
+    protected function getDoctrine()
+    {
+        return $this->doctrine ?: $this->doctrine = $this->getContainer()->get('doctrine');
     }
 }
